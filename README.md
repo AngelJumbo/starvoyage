@@ -2,7 +2,7 @@
 
 A simple space travel visualization built with HTML5 Canvas and JavaScript.
 
-[https://starvoyage.pages.dev/][https://starvoyage.pages.dev/]
+[https://starvoyage.pages.dev/](https://starvoyage.pages.dev/)
 
 ## Details
 
