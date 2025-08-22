@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Space Travel Effect</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            z-index: 10;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .control-group {
+            margin: 10px 0;
+        }
+        .control-section {
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .section-title {
+            color: #fff;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #ccc;
+        }
+        input[type="range"] {
+            width: 180px;
+        }
+        .info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .screensaver-mode .controls,
+        .screensaver-mode .info {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="spaceCanvas"></canvas>
+    
+    <div class="controls" id="controlsPanel">
+        <div class="control-section">
+            <div class="section-title">Movement</div>
+            <div class="control-group">
+                <label for="speedSlider">Speed: <span id="speedValue">5</span></label>
+                <input type="range" id="speedSlider" min="1" max="10" value="5">
+            </div>
+        </div>
+
+        <div class="control-section">
+            <div class="section-title">Stars</div>
+            <div class="control-group">
+                <label for="starCountSlider">Star Count: <span id="starCountValue">500</span></label>
+                <input type="range" id="starCountSlider" min="100" max="2000" value="500">
+            </div>
+        </div>
+
+        <div class="control-section">
+            <div class="section-title">Nebulas</div>
+            <div class="control-group">
+                <label for="nebulaCountSlider">Nebula Count: <span id="nebulaCountValue">3</span></label>
+                <input type="range" id="nebulaCountSlider" min="0" max="8" value="3">
+            </div>
+            <div class="control-group">
+                <label for="nebulaSizeSlider">Nebula Size: <span id="nebulaSizeValue">100</span>%</label>
+                <input type="range" id="nebulaSizeSlider" min="25" max="200" value="100">
+            </div>
+            <div class="control-group">
+                <label for="nebulaOpacitySlider">Nebula Opacity: <span id="nebulaOpacityValue">100</span>%</label>
+                <input type="range" id="nebulaOpacitySlider" min="10" max="300" value="100">
+            </div>
+            <div class="control-group">
+                <label for="nebulaSpawnRateSlider">Spawn Rate: <span id="nebulaSpawnRateValue">60</span>%</label>
+                <input type="range" id="nebulaSpawnRateSlider" min="10" max="100" value="60">
+            </div>
+            <div class="control-group">
+                <label for="nebulaDistanceSlider">Spawn Distance: <span id="nebulaDistanceValue">100</span>%</label>
+                <input type="range" id="nebulaDistanceSlider" min="50" max="200" value="100">
+            </div>
+        </div>
+    </div>
+    
+    <div class="info">
+        Space / Left click to toggle warp | S to toggle screensaver
+    </div>
+
+    <script>
+        const canvas = document.getElementById('spaceCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        // Global variables
+        let stars = [];
+        let speed = 5;
+        let normalSpeed = 5;
+        let starCount = 500;
+        let warpMode = false;
+        let screensaverMode = false;
+
+        // Nebula parameters
+        let nebulaCount = 3;
+        let nebulaSizeMultiplier = 1.0;
+        let nebulaOpacityMultiplier = 1.0;
+        let nebulaSpawnChance = 0.6; // 60% chance to delay spawn
+        let nebulaDistanceMultiplier = 1.0;
+
+        // Star types
+        const starTypes = [
+            { color: [135, 206, 250], size: 1.5, rarity: 0.05 }, 
+            { color: [255, 255, 255], size: 0.8, rarity: 0.3 }, 
+            { color: [255, 255, 180], size: 1.0, rarity: 0.4 }, 
+            { color: [255, 140, 0], size: 1.3, rarity: 0.15 }, 
+            { color: [255, 69, 0], size: 1.8, rarity: 0.1 } 
+        ];
+
+        class Nebula {
+            constructor(color) {
+                this.color = color;
+                this.reset(true);
+            }
+
+            reset(initial = false) {
+                // Use configurable spawn chance
+                if (!initial && Math.random() < nebulaSpawnChance) {
+                    this.spawnDelay = Math.random() * 20000 + 10000;
+                    this.z = -1;
+                    return;
+                }
+
+                this.x = (Math.random() - 0.5) * 4000;
+                this.y = (Math.random() - 0.5) * 4000;
+                
+                // Use configurable distance multiplier
+                const baseDistance = 10000 * nebulaDistanceMultiplier;
+                const rangeDistance = 5000 * nebulaDistanceMultiplier;
+                this.z = baseDistance + Math.random() * rangeDistance;
+                
+                // Use configurable size multiplier
+                this.baseSize = (600 + Math.random() * 400) * nebulaSizeMultiplier;
+                this.maxOpacity = (0.03 + Math.random() * 0.04) * nebulaOpacityMultiplier;
+
+                this.cloudParts = [];
+                
+                // Main cloud body
+                const mainParts = 2 + Math.floor(Math.random() * 2);
+                for (let i = 0; i < mainParts; i++) {
+                    const angle = (i / mainParts) * Math.PI * 2 + Math.random() * 0.5;
+                    const distance = Math.random() * this.baseSize * 0.3;
+                    this.cloudParts.push({
+                        x: Math.cos(angle) * distance,
+                        y: Math.sin(angle) * distance,
+                        size: 0.3 + Math.random() * 0.5,
+                        density: 0.7 + Math.random() * 0.3,
+                        type: 'main'
+                    });
+                }
+                
+                // Wispy edges
+                const wispyParts = 4 + Math.floor(Math.random() * 5);
+                for (let i = 0; i < wispyParts; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = this.baseSize * 0.4 + Math.random() * this.baseSize * 0.5;
+                    this.cloudParts.push({
+                        x: Math.cos(angle) * distance,
+                        y: Math.sin(angle) * distance,
+                        size: 0.7 + Math.random() * 0.9,
+                        density: 0.2 + Math.random() * 0.3,
+                        type: 'wispy'
+                    });
+                }
+
+                if (initial) {
+                    const initialDistance = 8000 * nebulaDistanceMultiplier;
+                    const initialRange = 7000 * nebulaDistanceMultiplier;
+                    this.z = initialDistance + Math.random() * initialRange;
+                }
+            }
+
+            update() {
+                if (this.z === -1) {
+                    this.spawnDelay -= 16.67;
+                    if (this.spawnDelay <= 0) {
+                        this.reset(true);
+                    }
+                    return;
+                }
+
+                this.z -= speed;
+
+                if (this.z <= 0) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                if (this.z === -1) return;
+
+                const screenX = (this.x / this.z) * canvas.width + canvas.width / 2;
+                const screenY = (this.y / this.z) * canvas.height + canvas.height / 2;
+
+                const maxDistance = 15000 * nebulaDistanceMultiplier;
+                const distanceRatio = Math.max(0, (maxDistance - this.z) / maxDistance);
+                const size = distanceRatio * distanceRatio * this.baseSize;
+                if (size < 2) return;
+
+                let baseOpacity;
+                if (this.z > 500) {
+                    baseOpacity = this.maxOpacity * distanceRatio * 0.6;
+                } else {
+                    const closenessFactor = this.z / 500;
+                    baseOpacity = this.maxOpacity * distanceRatio * 0.6 * closenessFactor;
+                }
+                
+                if (baseOpacity < 0.001) return;
+
+                this.cloudParts.forEach(part => {
+                    const partX = screenX + (part.x / this.z) * canvas.width;
+                    const partY = screenY + (part.y / this.z) * canvas.height;
+                    const partSize = size * part.size;
+                    const partOpacity = baseOpacity * part.density;
+
+                    if (partSize < 1) return;
+
+                    if (part.type === 'main') {
+                        const gradient = ctx.createRadialGradient(
+                            partX, partY, 0,
+                            partX, partY, partSize
+                        );
+                        gradient.addColorStop(0, `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${partOpacity})`);
+                        gradient.addColorStop(0.4, `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${partOpacity * 0.6})`);
+                        gradient.addColorStop(0.8, `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${partOpacity * 0.2})`);
+                        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(partX, partY, partSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        for (let i = 0; i < 3; i++) {
+                            const offsetX = (Math.random() - 0.5) * partSize * 0.3;
+                            const offsetY = (Math.random() - 0.5) * partSize * 0.3;
+                            const wispSize = partSize * (0.4 + Math.random() * 0.4);
+                            const wispOpacity = partOpacity * (0.3 + Math.random() * 0.4);
+                            
+                            const gradient = ctx.createRadialGradient(
+                                partX + offsetX, partY + offsetY, 0,
+                                partX + offsetX, partY + offsetY, wispSize
+                            );
+                            gradient.addColorStop(0, `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${wispOpacity})`);
+                            gradient.addColorStop(0.6, `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${wispOpacity * 0.3})`);
+                            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                            ctx.fillStyle = gradient;
+                            ctx.beginPath();
+                            ctx.arc(partX + offsetX, partY + offsetY, wispSize, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialize nebulas
+        let nebulas = [];
+        const nebulaColors = [
+            [128, 0, 128],   // purple
+            [0, 128, 255],   // blue
+            [255, 0, 128],   // pink
+            [0, 255, 128],   // teal
+            [255, 128, 0],   // orange
+            [128, 255, 0],   // lime
+            [255, 0, 255],   // magenta
+            [0, 255, 255]    // cyan
+        ];
+        
+        function initNebulas() {
+            nebulas = [];
+            for (let i = 0; i < nebulaCount; i++) {
+                const nebula = new Nebula(nebulaColors[i % nebulaColors.length]);
+                if (Math.random() < nebulaSpawnChance) {
+                    nebula.spawnDelay = Math.random() * 15000 + 5000;
+                    nebula.z = -1;
+                }
+                nebulas.push(nebula);
+            }
+        }
+        initNebulas();
+
+        class Star {
+            constructor() {
+                this.reset();
+                this.z = Math.random() * 1000;
+                this.assignType();
+            }
+            
+            assignType() {
+                const rand = Math.random();
+                let cumulative = 0;
+                for (let type of starTypes) {
+                    cumulative += type.rarity;
+                    if (rand < cumulative) {
+                        this.type = type;
+                        return;
+                    }
+                }
+                this.type = starTypes[1];
+            }
+            
+            reset() {
+                this.x = (Math.random() - 0.5) * 2000;
+                this.y = (Math.random() - 0.5) * 2000;
+                this.z = 1000;
+                this.prevX = undefined;
+                this.prevY = undefined;
+                this.assignType();
+            }
+            
+            update() {
+                this.z -= speed;
+                
+                if (this.z <= 0 || this.z > 1000) {
+                    this.reset();
+                }
+                
+                const screenX = (this.x / this.z) * canvas.width + canvas.width / 2;
+                const screenY = (this.y / this.z) * canvas.height + canvas.height / 2;
+                
+                this.prevX = this.screenX;
+                this.prevY = this.screenY;
+                this.screenX = screenX;
+                this.screenY = screenY;
+            }
+            
+            draw() {
+                if (this.screenX < -50 || this.screenX > canvas.width + 50 || 
+                    this.screenY < -50 || this.screenY > canvas.height + 50) {
+                    return;
+                }
+                
+                const baseSize = (1 - this.z / 1000) * 3 * this.type.size;
+                const opacity = 1 - this.z / 1000;
+                const [r, g, b] = this.type.color;
+                const color = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                
+                ctx.fillStyle = color;
+                
+                if (warpMode && this.prevX !== undefined && this.prevY !== undefined) {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = baseSize / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(this.prevX, this.prevY);
+                    ctx.lineTo(this.screenX, this.screenY);
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(this.screenX, this.screenY, baseSize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < starCount; i++) {
+                stars.push(new Star());
+            }
+        }
+
+        initStars();
+        
+        // Warp toggle controls
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                toggleWarpMode();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Prevent default spacebar behavior
+                toggleWarpMode();
+            } else if (e.code === 'KeyS') {
+                e.preventDefault(); // Prevent default S key behavior
+                toggleScreensaverMode();
+            }
+        });
+
+        function toggleWarpMode() {
+            const speedSlider = document.getElementById('speedSlider');
+            const speedValue = document.getElementById('speedValue');
+            
+            warpMode = !warpMode;
+            
+            if (warpMode) {
+                normalSpeed = speed;
+                speed = 30;
+                speedSlider.disabled = true;
+                speedSlider.style.opacity = '0.5';
+                speedValue.textContent = '30 (WARP)';
+            } else {
+                speed = normalSpeed;
+                speedSlider.disabled = false;
+                speedSlider.style.opacity = '1';
+                speedValue.textContent = speed;
+            }
+        }
+
+        function toggleScreensaverMode() {
+            screensaverMode = !screensaverMode;
+            
+            if (screensaverMode) {
+                document.body.classList.add('screensaver-mode');
+                canvas.style.cursor = 'none'; // Hide cursor in screensaver mode
+            } else {
+                document.body.classList.remove('screensaver-mode');
+                canvas.style.cursor = 'default'; // Show cursor again
+            }
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            nebulas.forEach(n => {
+                n.update();
+                n.draw();
+            });
+
+            stars.forEach(star => {
+                star.update();
+                star.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Control event listeners
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            if (!warpMode) {
+                speed = parseFloat(e.target.value);
+                normalSpeed = speed;
+                document.getElementById('speedValue').textContent = speed;
+            }
+        });
+        
+        document.getElementById('starCountSlider').addEventListener('input', (e) => {
+            starCount = parseInt(e.target.value);
+            document.getElementById('starCountValue').textContent = starCount;
+            initStars();
+        });
+
+        document.getElementById('nebulaCountSlider').addEventListener('input', (e) => {
+            nebulaCount = parseInt(e.target.value);
+            document.getElementById('nebulaCountValue').textContent = nebulaCount;
+            initNebulas();
+        });
+
+        document.getElementById('nebulaSizeSlider').addEventListener('input', (e) => {
+            nebulaSizeMultiplier = parseFloat(e.target.value) / 100;
+            document.getElementById('nebulaSizeValue').textContent = e.target.value;
+        });
+
+        document.getElementById('nebulaOpacitySlider').addEventListener('input', (e) => {
+            nebulaOpacityMultiplier = parseFloat(e.target.value) / 100;
+            document.getElementById('nebulaOpacityValue').textContent = e.target.value;
+        });
+
+        document.getElementById('nebulaSpawnRateSlider').addEventListener('input', (e) => {
+            nebulaSpawnChance = parseFloat(e.target.value) / 100;
+            document.getElementById('nebulaSpawnRateValue').textContent = e.target.value;
+        });
+
+        document.getElementById('nebulaDistanceSlider').addEventListener('input', (e) => {
+            nebulaDistanceMultiplier = parseFloat(e.target.value) / 100;
+            document.getElementById('nebulaDistanceValue').textContent = e.target.value;
+        });
+        
+        animate();
+
+    </script>
+
+</body>
+</html>
