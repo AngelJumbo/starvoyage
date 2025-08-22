@@ -8,4 +8,3 @@ A simple space travel visualization built with HTML5 Canvas and JavaScript.
 
 Star Voyage creates an interactive starfield effect that simulates traveling through space. You can adjust the speed, toggle warp mode, and customize the visual elements.
 
-Built using vanilla JavaScript and HTML5 Canvas API. No external dependencies required.
